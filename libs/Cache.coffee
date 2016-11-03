@@ -2,11 +2,10 @@ _ = require 'lodash'
 Promise = require 'bluebird'
 
 class Cache
-  constructor: (opts, @debug=false, @sync_key='_cacheSync') ->
+  constructor: (@opts={}, @debug=false, @sync_key='_cacheSync') ->
     @opts = _.assign {
       duplicate: false
-      expired: null
-    }, opts
+    }, @opts
     @cache = null
 
   log: (msg) ->
@@ -16,86 +15,86 @@ class Cache
   use: (plane) ->
     @cache = plane()
 
-  set: (name, opts={}, alias=null) ->
-    self = @
-    (req, res, next) ->
-      if not _.has(self.cache, 'set') or not _.has self.cache, 'get'
-        next new Error 'Please set cache plane'
-        return
-
-      if not _.has req, 'cache'
-        req.cache = {}
-
-      cache = req.cache
-
-      if _.has cache, 'get_or_create'
-        next new Error 'You have to set alias of every cache when use multiple cache in one route'
-        return
-
-      sync = _.has req.query, self.sync_key
+  set: (name, opts, alias) ->
+    if not _.has(@cache, 'set') or not _.has @cache, 'get'
+      throw new Error 'Please set a cache plane'
+    (req, res, next) =>
+      sync = _.has req.query, @sync_key
 
       if _.isFunction name
-        _cache = (obj) ->
-          self._make Promise.resolve(name obj), opts, sync
+        _cache = (obj) =>
+          @create Promise.resolve(name obj), ->
+            [sync, _.assign @opts, opts]
       else
-        _cache = self._make Promise.resolve(name), opts, sync
+        _cache = @create Promise.resolve(name), ->
+          [sync, _.assign @opts, opts]
+
+      is_init = false
+      if not _.has req, 'cache'
+        is_init = true
+        req.cache = {}
 
       if alias?
-        cache[alias] = _cache
+        req.cache[alias] = _cache
+      else if is_init is off
+        next new Error 'You have to set alias of every cache when use multiple cache in one route'
+        return
       else
-        cache = _cache
-
-      req.cache = cache
+        req.cache = _cache
 
       next()
 
-  _make: (get_name, opts, sync) ->
-    self = @
+  create: (get_name, get_config) ->
     {
-      get_or_create: (func) ->
-        get_name.then (name) ->
-          opts = _.assign self.opts, opts
+      get_or_create: (func) =>
+        get_name.then (name) =>
+          [sync, opts] = get_config()
           if sync is on
-            self.log "#{name} force sync"
-            self._getData name, func, opts, sync
+            @log "#{name} force sync"
+            @getData name, func, sync, opts
           else
-            self.log "#{name} get from cache"
-            self.cache.get name
-            .then (data) ->
+            @log "#{name} get from cache"
+            @cache.get name
+            .then (data) =>
               if data?
-                self.log "#{name} cache hit"
+                @log "#{name} cache hit"
                 Promise.resolve data
               else
-                self.log "#{name} cache miss"
-                self._getData name, func, opts, sync
+                @log "#{name} cache miss"
+                @getData name, func, sync, opts
     }
 
-  _getData: (name, func, opts, sync) ->
-    self = @
-    func (err) ->
-      if opts.duplicate is on and sync is off
-        self.log "#{name} get from duplicate"
-        self.cache.get "#{name}-duplicate"
-        .then (data) ->
-          if data?
-            self.log "#{name} duplicate hit"
-            Promise.resolve data
-          else
-            self.log "#{name} duplicate miss"
-            Promise.reject err
-        .catch (_err) ->
-          Promise.reject _err
-      else
-        Promise.reject err
-    , (data) ->
-      arr = [
-        self.cache.set name, data, opts.expired
-      ]
-      if opts.duplicate is on
-        self.log "#{name} create duplicate"
-        arr.push self.cache.set "#{name}-duplicate", data, null
-      Promise.all arr
-      .then ->
-        Promise.resolve data
+  getData: (name, func, sync, opts) ->
+    func (err) =>
+      @error err, name, sync, opts
+    , (data) =>
+      @success data, name, opts
+
+  error: (err, name, sync, opts) ->
+    if opts.duplicate and not sync
+      @log "#{name} get from duplicate"
+      @cache.get "#{name}-duplicate"
+      .then (data) =>
+        if data?
+          @log "#{name} duplicate hit"
+          Promise.resolve data
+        else
+          @log "#{name} duplicate miss"
+          Promise.reject err
+      .catch (_err) ->
+        Promise.reject _err
+    else
+      Promise.reject err
+
+  success: (data, name, opts) ->
+    arr = [
+      @cache.set name, data, opts.expired
+    ]
+    if opts.duplicate is on
+      @log "#{name} create duplicate"
+      arr.push @cache.set "#{name}-duplicate", data, null
+    Promise.all arr
+    .then ->
+      Promise.resolve data
 
 module.exports = Cache

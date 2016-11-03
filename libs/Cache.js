@@ -7,13 +7,13 @@
   Promise = require('bluebird');
 
   Cache = (function() {
-    function Cache(opts, debug, sync_key) {
+    function Cache(opts1, debug, sync_key) {
+      this.opts = opts1 != null ? opts1 : {};
       this.debug = debug != null ? debug : false;
       this.sync_key = sync_key != null ? sync_key : '_cacheSync';
       this.opts = _.assign({
-        duplicate: false,
-        expired: null
-      }, opts);
+        duplicate: false
+      }, this.opts);
       this.cache = null;
     }
 
@@ -28,103 +28,112 @@
     };
 
     Cache.prototype.set = function(name, opts, alias) {
-      var self;
-      if (opts == null) {
-        opts = {};
+      if (!_.has(this.cache, 'set') || !_.has(this.cache, 'get')) {
+        throw new Error('Please set a cache plane');
       }
-      if (alias == null) {
-        alias = null;
-      }
-      self = this;
-      return function(req, res, next) {
-        var _cache, cache, sync;
-        if (!_.has(self.cache, 'set') || !_.has(self.cache, 'get')) {
-          next(new Error('Please set cache plane'));
-          return;
-        }
-        if (!_.has(req, 'cache')) {
-          req.cache = {};
-        }
-        cache = req.cache;
-        if (_.has(cache, 'get_or_create')) {
-          next(new Error('You have to set alias of every cache when use multiple cache in one route'));
-          return;
-        }
-        sync = _.has(req.query, self.sync_key);
-        if (_.isFunction(name)) {
-          _cache = function(obj) {
-            return self._make(Promise.resolve(name(obj)), opts, sync);
-          };
-        } else {
-          _cache = self._make(Promise.resolve(name), opts, sync);
-        }
-        if (alias != null) {
-          cache[alias] = _cache;
-        } else {
-          cache = _cache;
-        }
-        req.cache = cache;
-        return next();
-      };
-    };
-
-    Cache.prototype._make = function(get_name, opts, sync) {
-      var self;
-      self = this;
-      return {
-        get_or_create: function(func) {
-          return get_name.then(function(name) {
-            opts = _.assign(self.opts, opts);
-            if (sync === true) {
-              self.log(name + " force sync");
-              return self._getData(name, func, opts, sync);
-            } else {
-              self.log(name + " get from cache");
-              return self.cache.get(name).then(function(data) {
-                if (data != null) {
-                  self.log(name + " cache hit");
-                  return Promise.resolve(data);
-                } else {
-                  self.log(name + " cache miss");
-                  return self._getData(name, func, opts, sync);
-                }
+      return (function(_this) {
+        return function(req, res, next) {
+          var _cache, is_init, sync;
+          sync = _.has(req.query, _this.sync_key);
+          if (_.isFunction(name)) {
+            _cache = function(obj) {
+              return _this.create(Promise.resolve(name(obj)), function() {
+                return [sync, _.assign(this.opts, opts)];
               });
-            }
-          });
-        }
+            };
+          } else {
+            _cache = _this.create(Promise.resolve(name), function() {
+              return [sync, _.assign(this.opts, opts)];
+            });
+          }
+          is_init = false;
+          if (!_.has(req, 'cache')) {
+            is_init = true;
+            req.cache = {};
+          }
+          if (alias != null) {
+            req.cache[alias] = _cache;
+          } else if (is_init === false) {
+            next(new Error('You have to set alias of every cache when use multiple cache in one route'));
+            return;
+          } else {
+            req.cache = _cache;
+          }
+          return next();
+        };
+      })(this);
+    };
+
+    Cache.prototype.create = function(get_name, get_config) {
+      return {
+        get_or_create: (function(_this) {
+          return function(func) {
+            return get_name.then(function(name) {
+              var opts, ref, sync;
+              ref = get_config(), sync = ref[0], opts = ref[1];
+              if (sync === true) {
+                _this.log(name + " force sync");
+                return _this.getData(name, func, sync, opts);
+              } else {
+                _this.log(name + " get from cache");
+                return _this.cache.get(name).then(function(data) {
+                  if (data != null) {
+                    _this.log(name + " cache hit");
+                    return Promise.resolve(data);
+                  } else {
+                    _this.log(name + " cache miss");
+                    return _this.getData(name, func, sync, opts);
+                  }
+                });
+              }
+            });
+          };
+        })(this)
       };
     };
 
-    Cache.prototype._getData = function(name, func, opts, sync) {
-      var self;
-      self = this;
-      return func(function(err) {
-        if (opts.duplicate === true && sync === false) {
-          self.log(name + " get from duplicate");
-          return self.cache.get(name + "-duplicate").then(function(data) {
+    Cache.prototype.getData = function(name, func, sync, opts) {
+      return func((function(_this) {
+        return function(err) {
+          return _this.error(err, name, sync, opts);
+        };
+      })(this), (function(_this) {
+        return function(data) {
+          return _this.success(data, name, opts);
+        };
+      })(this));
+    };
+
+    Cache.prototype.error = function(err, name, sync, opts) {
+      if (opts.duplicate && !sync) {
+        this.log(name + " get from duplicate");
+        return this.cache.get(name + "-duplicate").then((function(_this) {
+          return function(data) {
             if (data != null) {
-              self.log(name + " duplicate hit");
+              _this.log(name + " duplicate hit");
               return Promise.resolve(data);
             } else {
-              self.log(name + " duplicate miss");
+              _this.log(name + " duplicate miss");
               return Promise.reject(err);
             }
-          })["catch"](function(_err) {
-            return Promise.reject(_err);
-          });
-        } else {
-          return Promise.reject(err);
-        }
-      }, function(data) {
-        var arr;
-        arr = [self.cache.set(name, data, opts.expired)];
-        if (opts.duplicate === true) {
-          self.log(name + " create duplicate");
-          arr.push(self.cache.set(name + "-duplicate", data, null));
-        }
-        return Promise.all(arr).then(function() {
-          return Promise.resolve(data);
+          };
+        })(this))["catch"](function(_err) {
+          return Promise.reject(_err);
         });
+      } else {
+        return Promise.reject(err);
+      }
+    };
+
+    Cache.prototype.success = function(data, name, opts) {
+      var arr;
+      arr = [this.cache.set(name, data, opts.expired)];
+      if (opts.duplicate === true) {
+        this.log(name + " create duplicate");
+        arr.push(this.cache.set(name + "-duplicate", data, null));
+      }
+      return Promise.all(arr).then(function() {
+        return Promise.resolve(data);
       });
     };
 
