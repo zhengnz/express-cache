@@ -9,9 +9,7 @@
   Cache = (function() {
     function Cache(opts, debug, sync_key) {
       this.debug = debug != null ? debug : false;
-      if (sync_key == null) {
-        sync_key = '_cacheSync';
-      }
+      this.sync_key = sync_key != null ? sync_key : '_cacheSync';
       this.opts = _.assign({
         duplicate: false,
         expired: null
@@ -52,7 +50,7 @@
           next(new Error('You have to set alias of every cache when use multiple cache in one route'));
           return;
         }
-        sync = _.has(req.query, sync_key);
+        sync = _.has(req.query, self.sync_key);
         if (_.isFunction(name)) {
           _cache = function(obj) {
             return self._make(Promise.resolve(name(obj)), opts, sync);
@@ -73,10 +71,10 @@
     Cache.prototype._make = function(get_name, opts, sync) {
       var self;
       self = this;
-      opts = _.assign(this.opts, opts);
       return {
         get_or_create: function(func) {
           return get_name.then(function(name) {
+            opts = _.assign(self.opts, opts);
             if (sync === true) {
               self.log(name + " force sync");
               return self._getData(name, func, opts, sync);

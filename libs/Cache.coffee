@@ -2,7 +2,7 @@ _ = require 'lodash'
 Promise = require 'bluebird'
 
 class Cache
-  constructor: (opts, @debug=false, sync_key='_cacheSync') ->
+  constructor: (opts, @debug=false, @sync_key='_cacheSync') ->
     @opts = _.assign {
       duplicate: false
       expired: null
@@ -32,7 +32,7 @@ class Cache
         next new Error 'You have to set alias of every cache when use multiple cache in one route'
         return
 
-      sync = _.has req.query, sync_key
+      sync = _.has req.query, self.sync_key
 
       if _.isFunction name
         _cache = (obj) ->
@@ -51,10 +51,10 @@ class Cache
 
   _make: (get_name, opts, sync) ->
     self = @
-    opts = _.assign @opts, opts
     {
       get_or_create: (func) ->
         get_name.then (name) ->
+          opts = _.assign self.opts, opts
           if sync is on
             self.log "#{name} force sync"
             self._getData name, func, opts, sync
