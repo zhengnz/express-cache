@@ -1,6 +1,6 @@
 {
-  "name": "express-cache",
-  "version": "0.0.1",
+  "name": "express-cache-tool",
+  "version": "0.1.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -11,9 +11,17 @@
     "url": "git+https://github.com/zhengnz/express-cache.git"
   },
   "author": "'Norman' <'332535694@qq.com'>",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/zhengnz/express-cache/issues"
   },
-  "homepage": "https://github.com/zhengnz/express-cache#readme"
+  "homepage": "https://github.com/zhengnz/express-cache#readme",
+  "dependencies": {
+    "bluebird": "^3.4.6",
+    "file-cache-simple": "^0.0.7",
+    "ioredis": "^2.4.0",
+    "lodash": "^4.16.6",
+    "memory-cache": "^0.1.6",
+    "redis": "^2.6.3"
+  }
 }
