@@ -5,6 +5,7 @@ class Cache
   constructor: (@opts={}, @debug=false, @sync_key='_cacheSync') ->
     @opts = _.assign {
       duplicate: false
+      expired: null
     }, @opts
     @cache = null
 
@@ -12,12 +13,12 @@ class Cache
     if @debug is on
       console.log msg
 
-  use: (plane) ->
-    @cache = plane()
+  use: (scheme) ->
+    @cache = scheme()
 
   set: (name, opts, alias) ->
     if not _.has(@cache, 'set') or not _.has @cache, 'get'
-      throw new Error 'Please set a cache plane'
+      throw new Error 'Please set a cache scheme'
     (req, res, next) =>
       sync = _.has req.query, @sync_key
 

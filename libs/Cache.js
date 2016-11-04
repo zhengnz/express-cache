@@ -12,7 +12,8 @@
       this.debug = debug != null ? debug : false;
       this.sync_key = sync_key != null ? sync_key : '_cacheSync';
       this.opts = _.assign({
-        duplicate: false
+        duplicate: false,
+        expired: null
       }, this.opts);
       this.cache = null;
     }
@@ -23,13 +24,13 @@
       }
     };
 
-    Cache.prototype.use = function(plane) {
-      return this.cache = plane();
+    Cache.prototype.use = function(scheme) {
+      return this.cache = scheme();
     };
 
     Cache.prototype.set = function(name, opts, alias) {
       if (!_.has(this.cache, 'set') || !_.has(this.cache, 'get')) {
-        throw new Error('Please set a cache plane');
+        throw new Error('Please set a cache scheme');
       }
       return (function(_this) {
         return function(req, res, next) {
