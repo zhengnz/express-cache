@@ -5,7 +5,9 @@ var CacheTool = require('express-cache-tool');
 var cache = new CacheTool.Cache({
     duplicate: false, //default false, if true, will create a no expiration cache for this key
     expired: null //default null, ms
-}, [debug]);
+}, [debug], [sync_key]);
+//sync_key defaul '_cacheSync', if you want to refresh the cache, you can add ?{sync_key}=1 in url
+
 cache.use(CacheTool.MemoryCache);
 
 var test_cache1 = cache.set('key1', {duplicate: true, expired: 60000}, [alias]);
@@ -14,6 +16,7 @@ app.get('/', test_cache1, function(req, res, next){
   //if define alias, use req.cache.alias
   //else use req.cache
   req.cache.get_or_create(function(fail, done){
+    //if duplicate set true and the asyncFunc is fail, it will get the cache from duplicate
     asyncFunc().then(done).catch(fail);
   }).then(function(result){
     res.json(result);
@@ -35,7 +38,7 @@ redisCache = RedisCache({
     conf: 'host:port', //or use cluster [{host: host, port: port}, ...]
     db: 0
 }, [redis], [prefix]);
-//if set redis, use a already exists redis connet, must be base on ioredis
+//if set redis and the first parameter is null, use a already exists redis connet, must be base on ioredis
 
 cache.use(redisCache);
 ```
